@@ -445,7 +445,8 @@ def populate_first_run_window(
     secret: str,
     on_done: Callable[[bool], None],
 ) -> None:
-    tg_url = f"tg://proxy?server={host}&port={port}&secret=dd{secret}"
+    link_host = tg_ws_proxy.get_link_host(host)
+    tg_url = f"tg://proxy?server={link_host}&port={port}&secret=dd{secret}"
     fpx, fpy = FIRST_RUN_FRAME_PAD
     frame = main_content_frame(ctk, root, theme, padx=fpx, pady=fpy)
 
@@ -467,7 +468,7 @@ def populate_first_run_window(
         (f"  Или скопировать ссылку, отправить её себе в TG и нажать по ней: {tg_url}", False),
         ("\n  Вручную:", True),
         ("  Настройки → Продвинутые → Тип подключения → Прокси", False),
-        (f"  MTProto → {host} : {port}", False),
+        (f"  MTProto → {link_host} : {port}", False),
         (f"  Secret: dd{secret}", False),
     ]
 

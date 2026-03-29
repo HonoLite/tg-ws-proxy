@@ -1029,15 +1029,7 @@ async def _run(stop_event: Optional[asyncio.Event] = None):
         except (OSError, AttributeError):
             pass
 
-    link_host = proxy_config.host
-    if proxy_config.host == '0.0.0.0':
-        try:
-            with _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM) as _s:
-                _s.connect(('8.8.8.8', 80))
-                link_host = _s.getsockname()[0]
-        except OSError:
-            link_host = '127.0.0.1'
-
+    link_host = get_link_host(proxy_config.host)
     tg_link = f"tg://proxy?server={link_host}&port={proxy_config.port}&secret=dd{proxy_config.secret}"
 
     log.info("=" * 60)

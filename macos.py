@@ -427,6 +427,7 @@ def _show_first_run() -> None:
     port = _config.get("port", DEFAULT_CONFIG["port"])
     secret = _config.get("secret", DEFAULT_CONFIG["secret"])
     tg_url = tg_proxy_url(_config)
+    link_host = tg_ws_proxy.get_link_host(host)
 
     text = (
         f"Прокси запущен и работает в строке меню.\n\n"
@@ -436,7 +437,7 @@ def _show_first_run() -> None:
         f"  Или ссылка: {tg_url}\n\n"
         f"Вручную:\n"
         f"  Настройки → Продвинутые → Тип подключения → Прокси\n"
-        f"  MTProto → {host} : {port} \n"
+        f"  MTProto → {link_host} : {port} \n"
         f"  Secret: dd{secret} \n\n"
         f"Открыть прокси в Telegram сейчас?"
     )
