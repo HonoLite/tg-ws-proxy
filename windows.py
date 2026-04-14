@@ -383,14 +383,9 @@ def run_tray() -> None:
 
 
 def main() -> None:
-    if mutex_result := _acquire_win_mutex() is False:
+    if (mutex_result := _acquire_win_mutex()) is False or mutex_result is None and not acquire_lock():
         _show_info("Приложение уже запущено.", os.path.basename(sys.argv[0]))
         return
-    if mutex_result is None:
-        log.warning("Named mutex unavailable, falling back to lock file")
-        if not acquire_lock():
-            _show_info("Приложение уже запущено.", os.path.basename(sys.argv[0]))
-            return
 
     try:
         run_tray()
