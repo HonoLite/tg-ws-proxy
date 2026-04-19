@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import struct
 import ctypes
 import os
 import sys
@@ -119,6 +120,7 @@ def _ask_yes_no(text: str, title: str = "TG WS Proxy") -> bool:
 # autostart (registry)
 
 _RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
+_STARTUP_APPROVED_KEY = r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run"
 
 
 def _supports_autostart() -> bool:
@@ -133,7 +135,23 @@ def is_autostart_enabled() -> bool:
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _RUN_KEY, 0, winreg.KEY_READ) as k:
             val, _ = winreg.QueryValueEx(k, APP_NAME)
-        return str(val).strip() == _autostart_command().strip()
+
+        if str(val).strip() != _autostart_command().strip():
+            return False
+
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _STARTUP_APPROVED_KEY, 0, winreg.KEY_READ) as k:
+                approved_data, _ = winreg.QueryValueEx(k, APP_NAME)
+
+                if isinstance(approved_data, bytes) and len(approved_data) >= 4:
+                    state = struct.unpack('<I', approved_data[:4])[0]
+                    if state in (0x02, 0x03):
+                        return False
+        except (FileNotFoundError, OSError):
+            pass
+
+        return True
+
     except (FileNotFoundError, OSError):
         return False
 
@@ -141,19 +159,26 @@ def is_autostart_enabled() -> bool:
 def set_autostart_enabled(enabled: bool) -> None:
     try:
         with winreg.CreateKey(winreg.HKEY_CURRENT_USER, _RUN_KEY) as k:
-            if enabled:
-                winreg.SetValueEx(k, APP_NAME, 0, winreg.REG_SZ, _autostart_command())
-            else:
-                try:
-                    winreg.DeleteValue(k, APP_NAME)
-                except FileNotFoundError:
-                    pass
+            winreg.SetValueEx(k, APP_NAME, 0, winreg.REG_SZ, _autostart_command())
+
+        try:
+            with winreg.CreateKey(winreg.HKEY_CURRENT_USER, _STARTUP_APPROVED_KEY) as k:
+                if enabled:
+                    try:
+                        winreg.DeleteValue(k, APP_NAME)
+                    except FileNotFoundError:
+                        pass
+                else:
+                    disabled_data = struct.pack('<I', 0x00000002) + b'\x00' * 8
+                    winreg.SetValueEx(k, APP_NAME, 0, winreg.REG_BINARY, disabled_data)
+        except OSError as exc:
+            log.warning("Failed to update StartupApproved: %s", exc)
+
     except OSError as exc:
         log.error("Failed to update autostart: %s", exc)
         _show_error(
             "Не удалось изменить автозапуск.\n\n"
-            "Попробуйте запустить приложение от имени пользователя "
-            f"с правами на реестр.\n\nОшибка: {exc}"
+            f"Попробуйте запустить приложение от имени администратора.\n\nОшибка: {exc}"
         )
 
 
