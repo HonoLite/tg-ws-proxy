@@ -119,6 +119,9 @@ def _ask_yes_no(text: str, title: str = "TG WS Proxy") -> bool:
 # autostart (registry)
 
 _RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
+_STARTUP_APPROVED_RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run"
+_APPROVED_ENABLED_BLOB = bytes([0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+_APPROVED_DISABLED_BLOB = bytes([0x03, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
 
 
 def _supports_autostart() -> bool:
@@ -129,25 +132,64 @@ def _autostart_command() -> str:
     return f'"{sys.executable}"'
 
 
+def _query_startup_approved_blob() -> Optional[bytes]:
+    try:
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER, _STARTUP_APPROVED_RUN_KEY, 0, winreg.KEY_READ
+        ) as k:
+            blob, _ = winreg.QueryValueEx(k, APP_NAME)
+        return blob if isinstance(blob, bytes) else None
+    except (FileNotFoundError, OSError):
+        return None
+
+
+def _startup_approved_allows_run(blob: Optional[bytes]) -> bool:
+    if blob is None or len(blob) < 1:
+        return True
+    b0 = blob[0]
+    if b0 in (0x02, 0x06, 0x08):
+        return True
+    if b0 in (0x01, 0x03, 0x09):
+        return False
+    return False
+
+
 def is_autostart_enabled() -> bool:
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _RUN_KEY, 0, winreg.KEY_READ) as k:
             val, _ = winreg.QueryValueEx(k, APP_NAME)
-        return str(val).strip() == _autostart_command().strip()
     except (FileNotFoundError, OSError):
         return False
+    if str(val).strip() != _autostart_command().strip():
+        return False
+    return _startup_approved_allows_run(_query_startup_approved_blob())
 
 
 def set_autostart_enabled(enabled: bool) -> None:
     try:
-        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, _RUN_KEY) as k:
-            if enabled:
+        if enabled:
+            with winreg.CreateKey(winreg.HKEY_CURRENT_USER, _RUN_KEY) as k:
                 winreg.SetValueEx(k, APP_NAME, 0, winreg.REG_SZ, _autostart_command())
-            else:
-                try:
-                    winreg.DeleteValue(k, APP_NAME)
-                except FileNotFoundError:
-                    pass
+            with winreg.CreateKey(
+                winreg.HKEY_CURRENT_USER, _STARTUP_APPROVED_RUN_KEY
+            ) as k:
+                winreg.SetValueEx(
+                    k, APP_NAME, 0, winreg.REG_BINARY, _APPROVED_ENABLED_BLOB
+                )
+        else:
+            try:
+                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _RUN_KEY, 0, winreg.KEY_READ) as k:
+                    val, _ = winreg.QueryValueEx(k, APP_NAME)
+            except (FileNotFoundError, OSError):
+                return
+            if str(val).strip() != _autostart_command().strip():
+                return
+            with winreg.CreateKey(
+                winreg.HKEY_CURRENT_USER, _STARTUP_APPROVED_RUN_KEY
+            ) as k:
+                winreg.SetValueEx(
+                    k, APP_NAME, 0, winreg.REG_BINARY, _APPROVED_DISABLED_BLOB
+                )
     except OSError as exc:
         log.error("Failed to update autostart: %s", exc)
         _show_error(
